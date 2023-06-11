@@ -1,10 +1,10 @@
 const express = require("express");
-require("dotenv").config();
 const cors = require("cors");
-const jwt = require("jsonwebtoken");
+require("dotenv").config();
 const app = express();
+const jwt = require("jsonwebtoken");
 
-const { MongoClient, ServerApiVersion } = require("mongodb");
+const { MongoClient, ServerApiVersion, ObjectId } = require("mongodb");
 const port = process.env.PORT || 5000;
 
 // Middleware:
@@ -113,6 +113,14 @@ async function run() {
       res.send(result);
     });
 
+    // Instructor API's:
+    app.post("/add-class", verifyJWT, async (req, res) => {
+      const classBody = req.body;
+
+      const result = classesCollection.insertOne(classBody);
+      res.send(result);
+    });
+
     // All Bookings API:
     // Add booking/classes
     app.post("/bookings", async (req, res) => {
@@ -153,6 +161,15 @@ async function run() {
     //   const result = await bookingsCollection.find(query).toArray();
     //   res.send(result);
     // });
+
+    // delete booking Item:
+    app.delete("/delete-booking/:id", async (req, res) => {
+      const id = req.params.id;
+      const query = { _id: new ObjectId(id) };
+
+      const result = await bookingsCollection.deleteOne(query);
+      res.send(result);
+    });
 
     // Send a ping to confirm a successful connection
     await client.db("admin").command({ ping: 1 });
