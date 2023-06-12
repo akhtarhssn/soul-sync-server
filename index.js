@@ -201,9 +201,15 @@ async function run() {
     });
 
     // change classes status:
-    app.post("/class-status/:id", verifyJWT, verifyAdmin, async (req, res) => {
-      const status = req.body;
-      console.log(status);
+    app.patch("/class-status/:id", verifyJWT, verifyAdmin, async (req, res) => {
+      const { id } = req.params;
+      const { value } = req.body;
+
+      const filter = { _id: new ObjectId(id) };
+      const update = { $set: { status: value } };
+
+      const result = await classesCollection.updateOne(filter, update);
+      res.send(result);
     });
 
     app.get(
