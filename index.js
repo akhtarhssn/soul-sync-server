@@ -262,22 +262,18 @@ async function run() {
 
     // All Bookings API:
     // Add booking/classes
-    app.post("/bookings", verifyJWT, verifyStudent, async (req, res) => {
+    app.post("/bookings", async (req, res) => {
       const classes = req.body;
-
       const result = await bookingsCollection.insertOne(classes);
       res.send(result);
     });
-
     app.get("/my-bookings", verifyJWT, verifyStudent, async (req, res) => {
       const email = req.query.email;
       // console.log(email);
-
       // Return if no email found
       if (!email) {
         res.send([]);
       }
-
       // Verify if the given email match the token email
       const decodedEmail = req.decoded.email;
       if (email !== decodedEmail) {
@@ -285,21 +281,11 @@ async function run() {
           .status(403)
           .send({ error: true, message: "Forbidden access" });
       }
-
       // Now collect only selected user data/booking item
       const query = { studentEmail: email };
       const result = await bookingsCollection.find(query).toArray();
       res.send(result);
     });
-
-    // test bookings. checking if the bookings item does return anything:
-
-    // app.get("/lookout", async (req, res) => {
-    //   const email = req.query.email;
-    //   const query = { studentEmail: email };
-    //   const result = await bookingsCollection.find(query).toArray();
-    //   res.send(result);
-    // });
 
     // delete booking Item:
     app.delete("/delete-booking/:id", async (req, res) => {
@@ -309,19 +295,16 @@ async function run() {
       const result = await bookingsCollection.deleteOne(query);
       res.send(result);
     });
-
     // Stripe Payment API:
     app.post("/create-payment-intent", verifyJWT, async (req, res) => {
       const { price } = req.body;
       const amount = parseInt(price * 100);
-
       console.log({ price, amount: amount });
       const paymentIntent = await stripe.paymentIntents.create({
         amount: amount,
         currency: "usd",
         payment_method_types: ["card"],
       });
-
       res.send({
         clientSecret: paymentIntent.client_secret,
       });
@@ -330,10 +313,8 @@ async function run() {
     // payment history/related api:
     app.post("/payments", verifyJWT, async (req, res) => {
       const payment = req.body;
-
       // insert
       const insertResult = await paymentCollection.insertOne(payment);
-
       // delete
       const query = {
         _id: { $in: payment.bookingsItems.map((id) => new ObjectId(id)) },
@@ -362,7 +343,7 @@ async function run() {
       // Find the user's payment information
       const paymentQuery = { email };
       const paymentResult = await paymentCollection.findOne(paymentQuery);
-      console.log({ paymentResult });
+      // console.log("result", paymentResult);
 
       // Return 404 (Not Found) if no payment information is found
       if (!paymentResult) {
@@ -373,9 +354,12 @@ async function run() {
 
       // Get the classItems array from the payment information
       const { classItems } = paymentResult;
+      // console.log(classItems);
 
       // Find the classes based on the classItems array
-      const classesQuery = { _id: { $in: classItems } };
+      const classesQuery = {
+        _id: { $in: classItems.map((id) => new ObjectId(id)) },
+      };
       const classes = await classesCollection.find(classesQuery).toArray();
 
       res.send(classes);
