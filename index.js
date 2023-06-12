@@ -323,6 +323,26 @@ async function run() {
       res.send({ result: insertResult, deleteResult });
     });
 
+    app.get("/payment-history", verifyJWT, verifyStudent, async (req, res) => {
+      const email = req.query.email;
+      // console.log(email);
+      // Return if no email found
+      if (!email) {
+        res.send([]);
+      }
+      // Verify if the given email match the token email
+      const decodedEmail = req.decoded.email;
+      if (email !== decodedEmail) {
+        return res
+          .status(403)
+          .send({ error: true, message: "Forbidden access" });
+      }
+      // Now collect only selected user data/booking item
+      const query = { email: email };
+      const result = await paymentCollection.find(query).toArray();
+      res.send(result);
+    });
+
     // Get paid classes for users:
     app.get("/my-classes", verifyJWT, verifyStudent, async (req, res) => {
       const email = req.query.email;
