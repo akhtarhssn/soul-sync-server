@@ -117,6 +117,24 @@ async function run() {
       res.send(result);
     });
 
+    app.put("/classes/:id", (req, res) => {
+      const classId = req.params.id;
+      const adminFeedback = req.body.admin_feedback;
+
+      const filter = { _id: new ObjectId(classId) };
+      const updateDoc = {
+        $set: {
+          admin_feedback: adminFeedback,
+        },
+      };
+
+      // Update the class in the classesCollection using the provided feedback
+      // Replace this code with your actual database update logic
+
+      const result = classesCollection.updateOne(filter, updateDoc);
+      res.send(result);
+    });
+
     // Users api:
     // Get all users
     app.get("/instructor", async (req, res) => {
@@ -146,6 +164,7 @@ async function run() {
       res.send(result);
     });
 
+    // make admin
     app.patch("/users/admin/:id", verifyJWT, verifyAdmin, async (req, res) => {
       const id = req.params.id;
 
@@ -159,6 +178,46 @@ async function run() {
       const result = await usersCollection.updateOne(filter, updateDoc);
       res.send(result);
     });
+
+    // make instructor
+    app.patch(
+      "/users/instructor/:id",
+      verifyJWT,
+      verifyAdmin,
+      async (req, res) => {
+        const id = req.params.id;
+
+        const filter = { _id: new ObjectId(id) };
+        const updateDoc = {
+          $set: {
+            role: "Instructor",
+          },
+        };
+
+        const result = await usersCollection.updateOne(filter, updateDoc);
+        res.send(result);
+      }
+    );
+
+    // make student
+    app.patch(
+      "/users/student/:id",
+      verifyJWT,
+      verifyAdmin,
+      async (req, res) => {
+        const id = req.params.id;
+
+        const filter = { _id: new ObjectId(id) };
+        const updateDoc = {
+          $set: {
+            role: "Student",
+          },
+        };
+
+        const result = await usersCollection.updateOne(filter, updateDoc);
+        res.send(result);
+      }
+    );
 
     // Verify User role:
     app.get("/users/admin/:email", verifyJWT, async (req, res) => {
@@ -205,8 +264,8 @@ async function run() {
       const query = { email: email };
       const user = await usersCollection.findOne(query);
 
-      const result = { instructor: user?.role === "Student" };
-      res.send(result);
+      const role = user?.role || "";
+      res.send({ role });
     });
 
     // Instructor API's:
@@ -299,7 +358,7 @@ async function run() {
     app.post("/create-payment-intent", verifyJWT, async (req, res) => {
       const { price } = req.body;
       const amount = parseInt(price * 100);
-      console.log({ price, amount: amount });
+      // console.log({ price, amount: amount });
       const paymentIntent = await stripe.paymentIntents.create({
         amount: amount,
         currency: "usd",
@@ -311,15 +370,58 @@ async function run() {
     });
 
     // payment history/related api:
+    // app.post("/payments", verifyJWT, async (req, res) => {
+    //   const payment = req.body;
+    //   // insert
+    //   const insertResult = await paymentCollection.insertOne(payment);
+    //   // delete
+    //   const query = {
+    //     _id: { $in: payment.bookingsItems.map((id) => new ObjectId(id)) },
+    //   };
+    //   const deleteResult = await bookingsCollection.deleteMany(query);
+    //   res.send({ result: insertResult, deleteResult });
+    // });
+
+    // Increment and decrement of class seats
     app.post("/payments", verifyJWT, async (req, res) => {
       const payment = req.body;
-      // insert
+
+      // Fetch the class items based on the booking items
+      const classItems = await bookingsCollection
+        .find({
+          _id: { $in: payment.bookingsItems.map((id) => new ObjectId(id)) },
+        })
+        .toArray();
+
+      // console.log({ classItems });
+
+      // Store the class items in the payment document
+      payment.classItems = classItems.map((item) => item.itemId);
+      console.log(400, payment.classItems);
+
+      // Decrement the available_seats and increment the enrolled_students
+      const updatePromises = classItems.map((item) =>
+        classesCollection.updateOne(
+          { _id: item.itemId },
+          {
+            $inc: {
+              available_seats: -1,
+              enrolled_students: 1,
+            },
+          }
+        )
+      );
+      await Promise.all(updatePromises);
+
+      // Insert the payment document
       const insertResult = await paymentCollection.insertOne(payment);
-      // delete
+
+      // Delete the corresponding bookings
       const query = {
         _id: { $in: payment.bookingsItems.map((id) => new ObjectId(id)) },
       };
       const deleteResult = await bookingsCollection.deleteMany(query);
+
       res.send({ result: insertResult, deleteResult });
     });
 
@@ -362,27 +464,39 @@ async function run() {
 
       // Find the user's payment information
       const paymentQuery = { email };
-      const paymentResult = await paymentCollection.findOne(paymentQuery);
-      // console.log("result", paymentResult);
+      const paymentResult = await paymentCollection
+        .find(paymentQuery)
+        .toArray();
+      console.log("result", paymentResult);
 
       // Return 404 (Not Found) if no payment information is found
-      if (!paymentResult) {
+      if (paymentResult.length <= 0) {
         return res
           .status(404)
           .json({ error: "No paid classes found for the user." });
       }
+      const data = [];
 
-      // Get the classItems array from the payment information
-      const { classItems } = paymentResult;
-      // console.log(classItems);
+      for (const singleClass of paymentResult) {
+        for (const classId of singleClass.classItems) {
+          const classes = await classesCollection.findOne({
+            _id: new ObjectId(classId),
+          });
+          data.push(classes);
+        }
+      }
 
-      // Find the classes based on the classItems array
-      const classesQuery = {
-        _id: { $in: classItems.map((id) => new ObjectId(id)) },
-      };
-      const classes = await classesCollection.find(classesQuery).toArray();
+      // // Get the classItems array from the payment information
+      // const { classItems } = paymentResult;
+      // // console.log(classItems);
 
-      res.send(classes);
+      // // Find the classes based on the classItems array
+      // const classesQuery = {
+      //   _id: { $in: classItems.map((id) => new ObjectId(id)) },
+      // };
+      // const classes = await classesCollection.find(classesQuery).toArray();
+
+      res.send(data);
     });
 
     // Send a ping to confirm a successful connection
