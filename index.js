@@ -83,6 +83,32 @@ async function run() {
       next();
     };
 
+    const verifyInstructor = async (req, res, next) => {
+      const email = req.decoded.email;
+      const query = { email: email };
+      const user = await usersCollection.findOne(query);
+
+      if (user?.role !== "Instructor") {
+        return res
+          .status(403)
+          .send({ error: true, message: "Forbidden access" });
+      }
+      next();
+    };
+
+    const verifyStudent = async (req, res, next) => {
+      const email = req.decoded.email;
+      const query = { email: email };
+      const user = await usersCollection.findOne(query);
+
+      if (user?.role !== "Student") {
+        return res
+          .status(403)
+          .send({ error: true, message: "Forbidden access" });
+      }
+      next();
+    };
+
     // classes API:
     app.get("/all-classes", async (req, res) => {
       const result = await classesCollection.find().toArray();
@@ -113,24 +139,104 @@ async function run() {
       res.send(result);
     });
 
-    // Instructor API's:
-    app.post("/add-class", verifyJWT, async (req, res) => {
-      const classBody = req.body;
+    // Verify User role:
+    app.get("/users/admin/:email", verifyJWT, async (req, res) => {
+      const email = req.params.email;
 
-      const result = classesCollection.insertOne(classBody);
+      if (req.decoded.email !== email) {
+        return res
+          .status(403)
+          .send({ error: true, message: "Forbidden access" });
+      }
+
+      const query = { email: email };
+      const user = await usersCollection.findOne(query);
+
+      const result = { admin: user?.role === "Admin" };
       res.send(result);
     });
 
+    app.get("/users/instructor/:email", verifyJWT, async (req, res) => {
+      const email = req.params.email;
+
+      if (req.decoded.email !== email) {
+        return res
+          .status(403)
+          .send({ error: true, message: "Forbidden access" });
+      }
+
+      const query = { email: email };
+      const user = await usersCollection.findOne(query);
+
+      const result = { instructor: user?.role === "Instructor" };
+      res.send(result);
+    });
+
+    app.get("/users/student/:email", verifyJWT, async (req, res) => {
+      const email = req.params.email;
+
+      if (req.decoded.email !== email) {
+        return res
+          .status(403)
+          .send({ error: true, message: "Forbidden access" });
+      }
+
+      const query = { email: email };
+      const user = await usersCollection.findOne(query);
+
+      const result = { instructor: user?.role === "Student" };
+      res.send(result);
+    });
+
+    // Instructor API's:
+    app.post("/add-class", verifyJWT, verifyInstructor, async (req, res) => {
+      const classBody = req.body;
+
+      // console.log("Received classBody:", classBody);
+
+      const result = await classesCollection.insertOne(classBody);
+      // console.log("Result of insertOne:", result);
+
+      res.send(result);
+    });
+
+    app.get(
+      "/instructor-classes",
+      verifyJWT,
+      verifyInstructor,
+      async (req, res) => {
+        const email = req.query.email;
+
+        // Return if no email found
+        if (!email) {
+          res.send([]);
+        }
+
+        // Verify if the given email match the token email
+        const decodedEmail = req.decoded.email;
+        if (email !== decodedEmail) {
+          return res
+            .status(403)
+            .send({ error: true, message: "Forbidden access" });
+        }
+
+        // Now collect only selected Instructor class item
+        const query = { instructor_email: email };
+        const result = await classesCollection.find(query).toArray();
+        res.send(result);
+      }
+    );
+
     // All Bookings API:
     // Add booking/classes
-    app.post("/bookings", async (req, res) => {
+    app.post("/bookings", verifyJWT, verifyStudent, async (req, res) => {
       const classes = req.body;
 
       const result = await bookingsCollection.insertOne(classes);
       res.send(result);
     });
 
-    app.get("/my-bookings", verifyJWT, async (req, res) => {
+    app.get("/my-bookings", verifyJWT, verifyStudent, async (req, res) => {
       const email = req.query.email;
       // console.log(email);
 
