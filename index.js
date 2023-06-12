@@ -3,6 +3,7 @@ const cors = require("cors");
 require("dotenv").config();
 const app = express();
 const jwt = require("jsonwebtoken");
+const stripe = require("stripe")(process.env.STRIPE_SECRET_KEY);
 
 const { MongoClient, ServerApiVersion, ObjectId } = require("mongodb");
 const port = process.env.PORT || 5000;
@@ -58,6 +59,7 @@ async function run() {
     const usersCollection = client.db("swagSwayDb").collection("users");
     const classesCollection = client.db("swagSwayDb").collection("classes");
     const bookingsCollection = client.db("swagSwayDb").collection("bookings");
+    const paymentCollection = client.db("swagSwayDb").collection("payment");
 
     app.post("/jwt", (req, res) => {
       const user = req.body;
@@ -287,6 +289,38 @@ async function run() {
 
       const result = await bookingsCollection.deleteOne(query);
       res.send(result);
+    });
+
+    // Stripe Payment API:
+    app.post("/create-payment-intent", verifyJWT, async (req, res) => {
+      const { price } = req.body;
+      const amount = parseInt(price * 100);
+
+      console.log({ price, amount: amount });
+      const paymentIntent = await stripe.paymentIntents.create({
+        amount: amount,
+        currency: "usd",
+        payment_method_types: ["card"],
+      });
+
+      res.send({
+        clientSecret: paymentIntent.client_secret,
+      });
+    });
+
+    // payment history/related api:
+    app.post("/payments", verifyJWT, async (req, res) => {
+      const payment = req.body;
+
+      // insert
+      const insertResult = await paymentCollection.insertOne(payment);
+
+      // delete
+      const query = {
+        _id: { $in: payment.bookingsItems.map((id) => new ObjectId(id)) },
+      };
+      const deleteResult = await bookingsCollection.deleteMany(query);
+      res.send({ result: insertResult, deleteResult });
     });
 
     // Send a ping to confirm a successful connection
