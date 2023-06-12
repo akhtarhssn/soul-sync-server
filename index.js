@@ -141,6 +141,25 @@ async function run() {
       res.send(result);
     });
 
+    app.get("/manage-users", verifyJWT, verifyAdmin, async (req, res) => {
+      const result = await usersCollection.find().toArray();
+      res.send(result);
+    });
+
+    app.patch("/users/admin/:id", verifyJWT, verifyAdmin, async (req, res) => {
+      const id = req.params.id;
+
+      const filter = { _id: new ObjectId(id) };
+      const updateDoc = {
+        $set: {
+          role: "Admin",
+        },
+      };
+
+      const result = await usersCollection.updateOne(filter, updateDoc);
+      res.send(result);
+    });
+
     // Verify User role:
     app.get("/users/admin/:email", verifyJWT, async (req, res) => {
       const email = req.params.email;
@@ -321,6 +340,45 @@ async function run() {
       };
       const deleteResult = await bookingsCollection.deleteMany(query);
       res.send({ result: insertResult, deleteResult });
+    });
+
+    // Get paid classes for users:
+    app.get("/my-classes", verifyJWT, verifyStudent, async (req, res) => {
+      const email = req.query.email;
+
+      // Return if no email found
+      if (!email) {
+        return res.status(400).json({ error: "No email provided." });
+      }
+
+      // Verify if the given email match the token email
+      const decodedEmail = req.decoded.email;
+      if (email !== decodedEmail) {
+        return res
+          .status(403)
+          .send({ error: true, message: "Forbidden access" });
+      }
+
+      // Find the user's payment information
+      const paymentQuery = { email };
+      const paymentResult = await paymentCollection.findOne(paymentQuery);
+      console.log({ paymentResult });
+
+      // Return 404 (Not Found) if no payment information is found
+      if (!paymentResult) {
+        return res
+          .status(404)
+          .json({ error: "No paid classes found for the user." });
+      }
+
+      // Get the classItems array from the payment information
+      const { classItems } = paymentResult;
+
+      // Find the classes based on the classItems array
+      const classesQuery = { _id: { $in: classItems } };
+      const classes = await classesCollection.find(classesQuery).toArray();
+
+      res.send(classes);
     });
 
     // Send a ping to confirm a successful connection
