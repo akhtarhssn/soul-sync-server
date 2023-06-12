@@ -200,6 +200,12 @@ async function run() {
       res.send(result);
     });
 
+    // change classes status:
+    app.post("/class-status/:id", verifyJWT, verifyAdmin, async (req, res) => {
+      const status = req.body;
+      console.log(status);
+    });
+
     app.get(
       "/instructor-classes",
       verifyJWT,
