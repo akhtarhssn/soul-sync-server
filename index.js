@@ -284,6 +284,7 @@ async function run() {
     app.patch("/class-status/:id", verifyJWT, verifyAdmin, async (req, res) => {
       const { id } = req.params;
       const { value } = req.body;
+      // console.log(value);
 
       const filter = { _id: new ObjectId(id) };
       const update = { $set: { status: value } };
@@ -321,9 +322,21 @@ async function run() {
 
     // All Bookings API:
     // Add booking/classes
-    app.post("/bookings", async (req, res) => {
+    app.put("/bookings/:id", async (req, res) => {
+      // Get ID from url.
+      const id = req.params.id;
       const classes = req.body;
-      const result = await bookingsCollection.insertOne(classes);
+      // query database based on itemID
+      const query = { itemId: id };
+      const options = { upsert: true };
+      const updatedDoc = {
+        $set: classes,
+      };
+      const result = await bookingsCollection.updateOne(
+        query,
+        updatedDoc,
+        options
+      );
       res.send(result);
     });
     app.get("/my-bookings", verifyJWT, verifyStudent, async (req, res) => {
@@ -397,7 +410,7 @@ async function run() {
 
       // Store the class items in the payment document
       payment.classItems = classItems.map((item) => item.itemId);
-      console.log(400, payment.classItems);
+      // console.log(400, payment.classItems);
 
       // Decrement the available_seats and increment the enrolled_students
       const updatePromises = classItems.map((item) =>
@@ -467,35 +480,21 @@ async function run() {
       const paymentResult = await paymentCollection
         .find(paymentQuery)
         .toArray();
-      console.log("result", paymentResult);
+      // console.log("result", paymentResult);
 
-      // Return 404 (Not Found) if no payment information is found
-      if (paymentResult.length <= 0) {
-        return res
-          .status(404)
-          .json({ error: "No paid classes found for the user." });
-      }
       const data = [];
 
-      for (const singleClass of paymentResult) {
-        for (const classId of singleClass.classItems) {
-          const classes = await classesCollection.findOne({
+      for (const singlePayment of paymentResult) {
+        for (const classId of singlePayment.classItems) {
+          // checking the classId match the classes collection's _id.
+          const query = {
             _id: new ObjectId(classId),
-          });
+          };
+          const classes = await classesCollection.findOne(query);
+          // and finally pushing the matched classes to the data array.
           data.push(classes);
         }
       }
-
-      // // Get the classItems array from the payment information
-      // const { classItems } = paymentResult;
-      // // console.log(classItems);
-
-      // // Find the classes based on the classItems array
-      // const classesQuery = {
-      //   _id: { $in: classItems.map((id) => new ObjectId(id)) },
-      // };
-      // const classes = await classesCollection.find(classesQuery).toArray();
-
       res.send(data);
     });
 
@@ -513,6 +512,6 @@ run().catch(console.dir);
 
 app.listen(port, () => {
   console.log(
-    `Bistro Boss Server is Running in on Port: http://localhost:${port}`
+    `Soul Sync Server is Running in on Port: http://localhost:${port}`
   );
 });
